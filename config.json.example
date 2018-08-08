@@ -1,0 +1,28 @@
+{
+  "server": "irc.freenode.net",
+  "channels": ["#test"],
+  "botName": "FooBarAntiSpam",
+  "debug": false,
+  "showErrors": true,
+  "autoRejoin": true,
+  "floodProtection": true,
+  "floodProtectionDelay": 500,
+  "retryCount": 10,
+  "autoSendCommands": [
+    ["PRIVMSG", "NickServ", "identify foobar"]
+  ],
+  "messages": [
+    "All told, Handshake aims to give .250 worth of its tokens to .each. user of the websites the company has partnerships with",
+    "ATTN: This channel has moved to irc.freenode.net ##hamradio",
+    "https://bryanostergaard.com/",
+    "https://encyclopediadramatica.rs/Freenodegate",
+    "https://williampitcock.com/",
+    "https://www.coindesk.com",
+    "This channel has been hacked by Australia's #1 hacker Simon 'eVestigator' Smith",
+    "With our IRC ad service you can reach a global audience of entrepreneurs",
+    "This blog is essentially an ad for the Handshake ICO scam with a one-line .denial. of involvement mixed in there",
+    "Christel just posted this .denial. on the freenode blog https://freenode.net/news/spam-shake",
+    "Oh, and about those donations she speaks of: https://twitter.com/ISCdotORG/status/1025461692132519936",
+  ]
+}
+
