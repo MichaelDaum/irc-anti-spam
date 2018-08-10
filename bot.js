@@ -15,6 +15,7 @@ var IrcAntiSpam = function (thisConfig) {
     "floodProtection": true,
     "floodProtectionDelay": 500,
     "retryCount": 10,
+    "voiceDelay": 3000,
     "messages": [],
     "autoSendCommands": [],
     ... thisConfig
@@ -30,8 +31,8 @@ IrcAntiSpam.prototype.init = function() {
     self.messagesRegExp = new RegExp(self.config.messages.join("|"), "i");
   }
 
-  self.echoRegExp = new RegExp("^"+self.config.botName+", hi *$");
-  self.infoRegExp = new RegExp("^"+self.config.botName+", info *$");
+  self.echoRegExp = new RegExp("^"+self.config.botName+", hi");
+  self.infoRegExp = new RegExp("^"+self.config.botName+", info");
 
   self.spammers = [];
   self.numSpamMessages = 0;
@@ -65,6 +66,21 @@ IrcAntiSpam.prototype.init = function() {
     });
   });
 
+  self.client.addListener("join", function(channel, user, message) {
+    self.onJoin(user, channel, message);
+  });
+};
+
+IrcAntiSpam.prototype.onJoin = function(user, channel) {
+  var self = this;
+
+  if (self.config.voiceDelay && user !== self.config.botName) {
+    // delayed +v
+    console.log("INFO: will allow "+user+" to speak after "+self.config.voiceDelay+"ms ... ");
+    setTimeout(function() {
+      self.client.send("mode", channel, "+v", user);
+    }, self.config.voiceDelay);
+  }
 };
 
 IrcAntiSpam.prototype.onMessage = function(user, channel, message) {
