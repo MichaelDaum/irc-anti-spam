@@ -8,7 +8,8 @@
   "floodProtection": true,
   "floodProtectionDelay": 500,
   "retryCount": 10,
-  "voiceDelay": 3000,
+  "voiceDelay": 30000,
+  "immediatelyVoicedNicks": [],
   "autoSendCommands": [
     ["PRIVMSG", "NickServ", "identify foobar"]
   ],

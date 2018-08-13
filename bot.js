@@ -15,7 +15,8 @@ var IrcAntiSpam = function (thisConfig) {
     "floodProtection": true,
     "floodProtectionDelay": 500,
     "retryCount": 10,
-    "voiceDelay": 3000,
+    "voiceDelay": 30000,
+    "immediatelyVoicedNicks": [],
     "messages": [],
     "autoSendCommands": [],
     ... thisConfig
@@ -35,6 +36,7 @@ IrcAntiSpam.prototype.init = function() {
   self.infoRegExp = new RegExp("^"+self.config.botName+", info");
 
   self.spammers = [];
+  self.voiceTimers = {};
   self.numSpamMessages = 0;
 
   self.client = new irc.Client(self.config.server, self.config.botName, {
@@ -66,20 +68,60 @@ IrcAntiSpam.prototype.init = function() {
     });
   });
 
-  self.client.addListener("join", function(channel, user, message) {
-    self.onJoin(user, channel, message);
+  self.client.addListener("join", function(channel, user) {
+    self.onJoin(user, channel);
   });
+
+  self.client.addListener("part", function(channel, user) {
+    self.onLeave(user, channel);
+  });
+
+  self.client.addListener("quit", function(user, reason, channels) {
+    channels.forEach(function(channel) {
+      self.onLeave(user, channel);
+    });
+  });
+
+  self.client.addListener("kick", function(channel, user) {
+    self.onLeave(user, channel);
+  });
+
+  self.client.addListener("kill", function(user, reason, channels) {
+    channels.forEach(function(channel) {
+      self.onLeave(user, channel);
+    });
+  });
+
 };
 
 IrcAntiSpam.prototype.onJoin = function(user, channel) {
-  var self = this;
+  var self = this, 
+    key = user + "#" + channel;
 
   if (self.config.voiceDelay && user !== self.config.botName) {
     // delayed +v
-    console.log("INFO: will allow "+user+" to speak after "+self.config.voiceDelay+"ms ... ");
-    setTimeout(function() {
+    if (self.config.immediatelyVoicedNicks.indexOf(user) === -1) {
+      console.log("INFO: will allow "+user+" to speak after "+self.config.voiceDelay+"ms ... ");
+      //self.client.say(channel, "Hi, "+user+", you'll be allowed to speak soon.");
+      self.voiceTimers[key] = setTimeout(function() {
+        self.client.send("mode", channel, "+v", user);
+        delete self.voiceTimers[key];
+      }, self.config.voiceDelay);
+    } else {
+      console.log("INFO: immediately allow "+user+" to speak");
       self.client.send("mode", channel, "+v", user);
-    }, self.config.voiceDelay);
+    }
+  }
+};
+
+IrcAntiSpam.prototype.onLeave = function(user, channel) {
+  var self = this,
+    key = user + "#" + channel;
+
+  if (typeof(self.voiceTimers[key]) !== "undefined") {
+    console.log("INFO: "+user+" left too early to be able to speak");
+    clearTimeout(self.voiceTimers[key]);
+    delete self.voiceTimers[key];
   }
 };
 
