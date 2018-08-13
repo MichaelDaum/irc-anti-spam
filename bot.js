@@ -19,6 +19,9 @@ var IrcAntiSpam = function (thisConfig) {
     "immediatelyVoicedNicks": [],
     "messages": [],
     "autoSendCommands": [],
+    "banNick": true,
+    "banUser": true,
+    "banHost": true,
     ... thisConfig
   };
 
@@ -187,13 +190,19 @@ IrcAntiSpam.prototype.handleSpammer = function(nick, channel, message) {
   //console.log("INFO: banning nick '" + nick + "', user '" + user + "', host '" + message.host + "'");
 
   // nick ban
-  self.client.send("mode", channel, "+b", nick +"!*@*");
+  if (self.config.banNick) {
+    self.client.send("mode", channel, "+b", nick +"!*@*");
+  }
 
   // user ban
-  self.client.send("mode", channel, "+b", "*!" + user + "@*");
+  if (self.config.banUser) {
+    self.client.send("mode", channel, "+b", "*!" + user + "@*");
+  }
 
   // host ban
-  self.client.send("mode", channel, "+b", "*!*@" + message.host);
+  if (self.config.banHost) {
+    self.client.send("mode", channel, "+b", "*!*@" + message.host);
+  }
 };
 
 new IrcAntiSpam(config);

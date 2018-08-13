@@ -10,6 +10,9 @@
   "retryCount": 10,
   "voiceDelay": 30000,
   "immediatelyVoicedNicks": [],
+  "banNick": true,
+  "banUser": true,
+  "banHost": true,
   "autoSendCommands": [
     ["PRIVMSG", "NickServ", "identify foobar"]
   ],
