@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-var irc = require("irc");
+var irc = require("irc-upd");
 var config = require(process.env.CONFIG_FILE || "./config");
 
 var IrcAntiSpam = function (thisConfig) {
@@ -50,7 +50,8 @@ IrcAntiSpam.prototype.init = function() {
     autoRejoin: config.autoRejoin,
     floodProtection: config.floodProtection,
     floodProtectionDelay: config.floodProtectionDelay,
-    retryCount: config.retryCount
+    retryCount: config.retryCount,
+    stripColors: true
   });
 
   self.client.addListener("message", function (nick, channel, text, message) {
