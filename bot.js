@@ -50,8 +50,8 @@ IrcAntiSpam.prototype.init = function() {
     retryCount: config.retryCount
   });
 
-  self.client.addListener("message", function (user, channel, text, message) {
-    self.onMessage(user, channel, text, message);
+  self.client.addListener("message", function (nick, channel, text, message) {
+    self.onMessage(nick, channel, text, message);
   });
 
   self.client.addListener("error", function(message) {
@@ -68,128 +68,129 @@ IrcAntiSpam.prototype.init = function() {
     });
   });
 
-  self.client.addListener("join", function(channel, user) {
-    self.onJoin(user, channel);
+  self.client.addListener("join", function(channel, nick) {
+    self.onJoin(nick, channel);
   });
 
-  self.client.addListener("part", function(channel, user) {
-    self.onLeave(user, channel);
+  self.client.addListener("part", function(channel, nick) {
+    self.onLeave(nick, channel);
   });
 
-  self.client.addListener("quit", function(user, reason, channels) {
+  self.client.addListener("quit", function(nick, reason, channels) {
     channels.forEach(function(channel) {
-      self.onLeave(user, channel);
+      self.onLeave(nick, channel);
     });
   });
 
-  self.client.addListener("kick", function(channel, user) {
-    self.onLeave(user, channel);
+  self.client.addListener("kick", function(channel, nick) {
+    self.onLeave(nick, channel);
   });
 
-  self.client.addListener("kill", function(user, reason, channels) {
+  self.client.addListener("kill", function(nick, reason, channels) {
     channels.forEach(function(channel) {
-      self.onLeave(user, channel);
+      self.onLeave(nick, channel);
     });
   });
 
 };
 
-IrcAntiSpam.prototype.onJoin = function(user, channel) {
+IrcAntiSpam.prototype.onJoin = function(nick, channel) {
   var self = this, 
-    key = user + "#" + channel;
+    key = nick + "#" + channel;
 
-  if (self.config.voiceDelay && user !== self.config.botName) {
+  if (self.config.voiceDelay && nick !== self.config.botName) {
     // delayed +v
-    if (self.config.immediatelyVoicedNicks.indexOf(user) === -1) {
-      console.log("INFO: will allow "+user+" to speak after "+self.config.voiceDelay+"ms ... ");
-      //self.client.say(channel, "Hi, "+user+", you'll be allowed to speak soon.");
+    if (self.config.immediatelyVoicedNicks.indexOf(nick) === -1) {
+      console.log("INFO: will allow "+nick+" to speak after "+self.config.voiceDelay+"ms ... ");
+      //self.client.say(channel, "Hi, "+nick+", you'll be allowed to speak soon.");
       self.voiceTimers[key] = setTimeout(function() {
-        self.client.send("mode", channel, "+v", user);
+        self.client.send("mode", channel, "+v", nick);
         delete self.voiceTimers[key];
       }, self.config.voiceDelay);
     } else {
-      console.log("INFO: immediately allow "+user+" to speak");
-      self.client.send("mode", channel, "+v", user);
+      console.log("INFO: immediately allow "+nick+" to speak");
+      self.client.send("mode", channel, "+v", nick);
     }
   }
 };
 
-IrcAntiSpam.prototype.onLeave = function(user, channel) {
+IrcAntiSpam.prototype.onLeave = function(nick, channel) {
   var self = this,
-    key = user + "#" + channel;
+    key = nick + "#" + channel;
 
   if (typeof(self.voiceTimers[key]) !== "undefined") {
-    console.log("INFO: "+user+" left too early to be able to speak");
+    console.log("INFO: "+nick+" left too early to be able to speak");
     clearTimeout(self.voiceTimers[key]);
     delete self.voiceTimers[key];
   }
 };
 
-IrcAntiSpam.prototype.onMessage = function(user, channel, text, message) {
+IrcAntiSpam.prototype.onMessage = function(nick, channel, text, message) {
   var self = this;
-  //console.log(channel + " - " + user + ": " + text);
+  //console.log(channel + " - " + nick + ": " + text);
 
   if (self.echoRegExp.test(text)) {
-    self.handleEcho(user, channel);
+    self.handleEcho(nick, channel);
     return;
   }
 
   if (self.infoRegExp.test(text)) {
-    self.handleInfo(user, channel);
+    self.handleInfo(nick, channel);
     return;
   }
 
-  if (self.spammers.indexOf(user) !== -1) {
-    console.log("WARNING: banned user "+user);
+  if (self.spammers.indexOf(nick) !== -1) {
+    console.log("WARNING: banned nick "+nick);
     self.numSpamMessages++;
-    self.handleSpammer(user, channel, message);
+    self.handleSpammer(nick, channel, message);
     return;
   }
 
   if (self.messagesRegExp && self.messagesRegExp.test(text)) {
-    self.handleSpammer(user, channel, message);
+    self.handleSpammer(nick, channel, message);
     return;
   }
 };
 
-IrcAntiSpam.prototype.handleInfo = function(user, channel) {
+IrcAntiSpam.prototype.handleInfo = function(nick, channel) {
   var self = this;
 
   self.client.say(channel, self.spammers.length + " user(s) kicked. " + self.numSpamMessages + " spam message(s) blocked.");
 };
 
-IrcAntiSpam.prototype.handleEcho = function(user, channel) {
+IrcAntiSpam.prototype.handleEcho = function(nick, channel) {
   var self = this;
-  self.client.say(channel, "Hi, " + user);
+  self.client.say(channel, "Hi, " + nick);
 };
 
-IrcAntiSpam.prototype.handleSpammer = function(user, channel, message) {
-  var self = this;
+IrcAntiSpam.prototype.handleSpammer = function(nick, channel, message) {
+  var self = this,
+    user = message.user.replace(/^~/, "");
 
-  console.log("WARNING: spam detected ... kick-banning user "+user+" from channel "+channel);
+  console.log("WARNING: spam detected ... kick-banning nick "+nick+" from channel "+channel);
   self.numSpamMessages++;
 
-  if (self.spammers.indexOf(user) === -1) {
-    self.spammers.push(user);
+  if (self.spammers.indexOf(nick) === -1) {
+    self.spammers.push(nick);
   }
 
   if (self.spammers.indexOf(message.nick) === -1) {
     self.spammers.push(message.nick);
   }
 
-  if (self.spammers.indexOf(message.user) === -1) {
-    self.spammers.push(message.user);
+  if (self.spammers.indexOf(user) === -1) {
+    self.spammers.push(user);
   }
 
-  self.client.send("kick", channel, user, "you are a spammer");
+  self.client.send("kick", channel, nick, "you are a spammer");
 
-  //console.log("INFO: banning nick '" + message.nick + "', user '" + message.user + "', host '" + message.host + "'");
+  //console.log("INFO: banning nick '" + nick + "', user '" + user + "', host '" + message.host + "'");
 
   // nick ban
-  self.client.send("mode", channel, "+b", message.nick +"!*@*");
+  self.client.send("mode", channel, "+b", nick +"!*@*");
 
   // user ban
-  self.client.send("mode", channel, "+b", "*!" + message.user + "@*");
+  self.client.send("mode", channel, "+b", "*!" + user + "@*");
 
   // host ban
   self.client.send("mode", channel, "+b", "*!*@" + message.host);
