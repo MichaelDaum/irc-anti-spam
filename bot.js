@@ -50,8 +50,8 @@ IrcAntiSpam.prototype.init = function() {
     retryCount: config.retryCount
   });
 
-  self.client.addListener("message", function (user, channel, message) {
-    self.onMessage(user, channel, message);
+  self.client.addListener("message", function (user, channel, text, message) {
+    self.onMessage(user, channel, text, message);
   });
 
   self.client.addListener("error", function(message) {
@@ -125,16 +125,16 @@ IrcAntiSpam.prototype.onLeave = function(user, channel) {
   }
 };
 
-IrcAntiSpam.prototype.onMessage = function(user, channel, message) {
+IrcAntiSpam.prototype.onMessage = function(user, channel, text, message) {
   var self = this;
-  //console.log(channel + " - " + user + ": " + message);
+  //console.log(channel + " - " + user + ": " + text);
 
-  if (self.echoRegExp.test(message)) {
+  if (self.echoRegExp.test(text)) {
     self.handleEcho(user, channel);
     return;
   }
 
-  if (self.infoRegExp.test(message)) {
+  if (self.infoRegExp.test(text)) {
     self.handleInfo(user, channel);
     return;
   }
@@ -142,12 +142,12 @@ IrcAntiSpam.prototype.onMessage = function(user, channel, message) {
   if (self.spammers.indexOf(user) !== -1) {
     console.log("WARNING: banned user "+user);
     self.numSpamMessages++;
-    self.handleSpammer(user, channel);
+    self.handleSpammer(user, channel, message);
     return;
   }
 
-  if (self.messagesRegExp && self.messagesRegExp.test(message)) {
-    self.handleSpammer(user, channel);
+  if (self.messagesRegExp && self.messagesRegExp.test(text)) {
+    self.handleSpammer(user, channel, message);
     return;
   }
 };
@@ -163,7 +163,7 @@ IrcAntiSpam.prototype.handleEcho = function(user, channel) {
   self.client.say(channel, "Hi, " + user);
 };
 
-IrcAntiSpam.prototype.handleSpammer = function(user, channel) {
+IrcAntiSpam.prototype.handleSpammer = function(user, channel, message) {
   var self = this;
 
   console.log("WARNING: spam detected ... kick-banning user "+user+" from channel "+channel);
@@ -173,8 +173,26 @@ IrcAntiSpam.prototype.handleSpammer = function(user, channel) {
     self.spammers.push(user);
   }
 
+  if (self.spammers.indexOf(message.nick) === -1) {
+    self.spammers.push(message.nick);
+  }
+
+  if (self.spammers.indexOf(message.user) === -1) {
+    self.spammers.push(message.user);
+  }
+
   self.client.send("kick", channel, user, "you are a spammer");
-  self.client.send("mode", channel, "+b", user +"!*@*");
+
+  //console.log("INFO: banning nick '" + message.nick + "', user '" + message.user + "', host '" + message.host + "'");
+
+  // nick ban
+  self.client.send("mode", channel, "+b", message.nick +"!*@*");
+
+  // user ban
+  self.client.send("mode", channel, "+b", "*!" + message.user + "@*");
+
+  // host ban
+  self.client.send("mode", channel, "+b", "*!*@" + message.host);
 };
 
 new IrcAntiSpam(config);
