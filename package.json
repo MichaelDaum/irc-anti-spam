@@ -1,6 +1,6 @@
 {
   "name": "irc-anti-spam",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "kick users once they start spamming.",
   "repository": {
     "type": "git",

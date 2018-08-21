@@ -2,6 +2,7 @@
 
 var irc = require("irc-upd");
 var config = require(process.env.CONFIG_FILE || "./config");
+var fs = require("fs");
 
 var IrcAntiSpam = function (thisConfig) {
   var self = this;
@@ -16,7 +17,8 @@ var IrcAntiSpam = function (thisConfig) {
     "floodProtectionDelay": 500,
     "retryCount": 10,
     "voiceDelay": 30000,
-    "immediatelyVoicedNicks": [],
+    "whiteListFile": false,
+    "blackListFile": false,
     "messages": [],
     "autoSendCommands": [],
     "banNick": true,
@@ -38,9 +40,24 @@ IrcAntiSpam.prototype.init = function() {
   self.echoRegExp = new RegExp("^"+self.config.botName+", hi");
   self.infoRegExp = new RegExp("^"+self.config.botName+", info");
 
-  self.spammers = [];
+  self.blackList = [];
+  self.whiteList = [];
   self.voiceTimers = {};
   self.numSpamMessages = 0;
+
+  if (self.config.whiteListFile) {
+    console.log("INFO: reading whitelist from "+self.config.whiteListFile);
+    let data = fs.readFileSync(self.config.whiteListFile);
+    self.whiteList = JSON.parse(data);
+    console.log("INFO: ... "+self.whiteList.length+" entries found");
+  }
+
+  if (self.config.blackListFile) {
+    console.log("INFO: reading blacklist from "+self.config.blackListFile);
+    let data = fs.readFileSync(self.config.blackListFile);
+    self.blackList = JSON.parse(data);
+    console.log("INFO: ... "+self.blackList.length+" entries found");
+  }
 
   self.client = new irc.Client(self.config.server, self.config.botName, {
     channels: config.channels,
@@ -72,8 +89,8 @@ IrcAntiSpam.prototype.init = function() {
     });
   });
 
-  self.client.addListener("join", function(channel, nick) {
-    self.onJoin(nick, channel);
+  self.client.addListener("join", function(channel, nick, message) {
+    self.onJoin(nick, channel, message);
   });
 
   self.client.addListener("part", function(channel, nick) {
@@ -98,23 +115,34 @@ IrcAntiSpam.prototype.init = function() {
 
 };
 
-IrcAntiSpam.prototype.onJoin = function(nick, channel) {
+IrcAntiSpam.prototype.onJoin = function(nick, channel, message) {
   var self = this, 
     key = nick + "#" + channel;
 
+  // process whiteList
+  if (self.whiteList.indexOf(nick) !== -1) {
+    console.log("INFO: immediately allow "+nick+" to speak");
+    self.client.send("mode", channel, "+v", nick);
+    return;
+  }
+
+  // process blackList
+  if (self.blackList.indexOf(nick) !== -1) {
+    console.log("INFO: immediately kick "+nick);
+    self.handleSpammer(nick, channel, message);
+    return;
+  }
+
+  // otherwise
   if (self.config.voiceDelay && nick !== self.config.botName) {
-    // delayed +v
-    if (self.config.immediatelyVoicedNicks.indexOf(nick) === -1) {
-      console.log("INFO: will allow "+nick+" to speak after "+self.config.voiceDelay+"ms ... ");
-      //self.client.say(channel, "Hi, "+nick+", you'll be allowed to speak soon.");
-      self.voiceTimers[key] = setTimeout(function() {
-        self.client.send("mode", channel, "+v", nick);
-        delete self.voiceTimers[key];
-      }, self.config.voiceDelay);
-    } else {
-      console.log("INFO: immediately allow "+nick+" to speak");
+
+    console.log("INFO: will allow "+nick+" to speak after "+self.config.voiceDelay+"ms ... ");
+    //self.client.say(channel, "Hi, "+nick+", you'll be allowed to speak soon.");
+
+    self.voiceTimers[key] = setTimeout(function() {
       self.client.send("mode", channel, "+v", nick);
-    }
+      delete self.voiceTimers[key];
+    }, self.config.voiceDelay);
   }
 };
 
@@ -131,7 +159,6 @@ IrcAntiSpam.prototype.onLeave = function(nick, channel) {
 
 IrcAntiSpam.prototype.onMessage = function(nick, channel, text, message) {
   var self = this;
-  //console.log(channel + " - " + nick + ": " + text);
 
   if (self.echoRegExp.test(text)) {
     self.handleEcho(nick, channel);
@@ -143,7 +170,12 @@ IrcAntiSpam.prototype.onMessage = function(nick, channel, text, message) {
     return;
   }
 
-  if (self.spammers.indexOf(nick) !== -1) {
+  if (self.whiteList.indexOf(nick) !== -1) {
+    //console.log("INFO: found nick "+nick+" on whitelist");
+    return;
+  }
+
+  if (self.blackList.indexOf(nick) !== -1) {
     console.log("WARNING: banned nick "+nick);
     self.numSpamMessages++;
     self.handleSpammer(nick, channel, message);
@@ -159,7 +191,7 @@ IrcAntiSpam.prototype.onMessage = function(nick, channel, text, message) {
 IrcAntiSpam.prototype.handleInfo = function(nick, channel) {
   var self = this;
 
-  self.client.say(channel, self.spammers.length + " user(s) kicked. " + self.numSpamMessages + " spam message(s) blocked.");
+  self.client.say(channel, self.blackList.length + " user(s) kicked. " + self.numSpamMessages + " spam message(s) blocked.");
 };
 
 IrcAntiSpam.prototype.handleEcho = function(nick, channel) {
@@ -169,21 +201,20 @@ IrcAntiSpam.prototype.handleEcho = function(nick, channel) {
 
 IrcAntiSpam.prototype.handleSpammer = function(nick, channel, message) {
   var self = this,
-    user = message.user.replace(/^~/, "");
+    user = message.user.replace(/^~/, ""),
+    newSpammerFound = false;
 
   console.log("WARNING: spam detected ... kick-banning nick "+nick+" from channel "+channel);
   self.numSpamMessages++;
 
-  if (self.spammers.indexOf(nick) === -1) {
-    self.spammers.push(nick);
+  if (self.blackList.indexOf(nick) === -1) {
+    self.blackList.push(nick);
+    newSpammerFound = true;
   }
 
-  if (self.spammers.indexOf(message.nick) === -1) {
-    self.spammers.push(message.nick);
-  }
-
-  if (self.spammers.indexOf(user) === -1) {
-    self.spammers.push(user);
+  if (self.blackList.indexOf(user) === -1) {
+    self.blackList.push(user);
+    newSpammerFound = true;
   }
 
   self.client.send("kick", channel, nick, "you are a spammer");
@@ -203,6 +234,12 @@ IrcAntiSpam.prototype.handleSpammer = function(nick, channel, message) {
   // host ban
   if (self.config.banHost) {
     self.client.send("mode", channel, "+b", "*!*@" + message.host);
+  }
+
+  // update blacklist
+  if (newSpammerFound && self.config.blackListFile) {
+    let data = JSON.stringify(self.blackList);
+    fs.writeFileSync(self.config.blackListFile, data);
   }
 };
 
