@@ -3,6 +3,7 @@
 var irc = require("irc-upd");
 var config = require(process.env.CONFIG_FILE || "./config");
 var fs = require("fs");
+var tr = require("transliteration");
 
 var IrcAntiSpam = function (thisConfig) {
   var self = this;
@@ -121,14 +122,14 @@ IrcAntiSpam.prototype.onJoin = function(nick, channel, message) {
 
   // process whiteList
   if (self.whiteList.indexOf(nick) !== -1) {
-    console.log("INFO: immediately allow "+nick+" to speak");
+    console.log("INFO: immediately allowing known nick '" + nick + "' to speak");
     self.client.send("mode", channel, "+v", nick);
     return;
   }
 
   // process blackList
   if (self.blackList.indexOf(nick) !== -1) {
-    console.log("INFO: immediately kick "+nick);
+    console.log("INFO: immediately kicking known nick '" + nick + "' from channel " + channel);
     self.handleSpammer(nick, channel, message);
     return;
   }
@@ -158,7 +159,10 @@ IrcAntiSpam.prototype.onLeave = function(nick, channel) {
 };
 
 IrcAntiSpam.prototype.onMessage = function(nick, channel, text, message) {
-  var self = this;
+  var self = this,
+    text_tr = tr.transliterate(text, {
+      unknown: "."
+    });
 
   if (self.echoRegExp.test(text)) {
     self.handleEcho(nick, channel);
@@ -176,13 +180,14 @@ IrcAntiSpam.prototype.onMessage = function(nick, channel, text, message) {
   }
 
   if (self.blackList.indexOf(nick) !== -1) {
-    console.log("WARNING: banned nick "+nick);
+    console.log("INFO: banned nick "+nick);
     self.numSpamMessages++;
     self.handleSpammer(nick, channel, message);
     return;
   }
 
-  if (self.messagesRegExp && self.messagesRegExp.test(text)) {
+  if (self.messagesRegExp && self.messagesRegExp.test(text_tr)) {
+    console.log("INFO: spam message detected: ",text_tr);
     self.handleSpammer(nick, channel, message);
     return;
   }
@@ -204,7 +209,6 @@ IrcAntiSpam.prototype.handleSpammer = function(nick, channel, message) {
     user = message.user.replace(/^~/, ""),
     newSpammerFound = false;
 
-  console.log("WARNING: spam detected ... kick-banning nick "+nick+" from channel "+channel);
   self.numSpamMessages++;
 
   if (self.blackList.indexOf(nick) === -1) {
@@ -217,22 +221,25 @@ IrcAntiSpam.prototype.handleSpammer = function(nick, channel, message) {
     newSpammerFound = true;
   }
 
+  console.log("INFO: kicking nick '" + nick + "' from channel "+channel);
   self.client.send("kick", channel, nick, "you are a spammer");
 
-  //console.log("INFO: banning nick '" + nick + "', user '" + user + "', host '" + message.host + "'");
 
   // nick ban
   if (self.config.banNick) {
+    console.log("INFO: banning nick '" + nick + "'");
     self.client.send("mode", channel, "+b", nick +"!*@*");
   }
 
   // user ban
   if (self.config.banUser) {
+    console.log("INFO: banning user '" + user + "'");
     self.client.send("mode", channel, "+b", "*!" + user + "@*");
   }
 
   // host ban
   if (self.config.banHost) {
+    console.log("INFO: banning host '" + message.host + "'");
     self.client.send("mode", channel, "+b", "*!*@" + message.host);
   }
 
